@@ -8,7 +8,7 @@ Each scanner uses different scales:
 - Rapid7: Critical/Severe/Moderate/Low
 """
 
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 SEVERITY_MAPPINGS: Dict[str, Dict[str, str]] = {
     "qualys": {
@@ -63,14 +63,14 @@ SEVERITY_MAPPINGS: Dict[str, Dict[str, str]] = {
 def normalize_severity(value: Optional[str | int], scanner: str = "generic") -> str:
     """
     Normalize severity to standard levels: Critical, High, Medium, Low.
-    
+
     Args:
         value: Raw severity from scanner (e.g., "5", "Critical", "High")
         scanner: Scanner name for specific mapping
-        
+
     Returns:
         Normalized severity string
-        
+
     Examples:
         >>> normalize_severity("5", "qualys")
         'Critical'
@@ -79,17 +79,17 @@ def normalize_severity(value: Optional[str | int], scanner: str = "generic") -> 
     """
     if value is None:
         return "Low"
-    
+
     mapping = SEVERITY_MAPPINGS.get(scanner.lower(), SEVERITY_MAPPINGS["generic"])
     str_value = str(value).strip()
-    
+
     # Direct match
     if str_value in mapping:
         return mapping[str_value]
-    
+
     # Case-insensitive match
     for key, normalized in mapping.items():
         if key.lower() == str_value.lower():
             return normalized
-    
+
     return "Low"

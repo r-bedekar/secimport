@@ -6,62 +6,68 @@ API Docs: https://falcon.crowdstrike.com/documentation/
 Status: STUB - Community contribution welcome!
 """
 
-from typing import Iterator, List, Optional, Dict, Any
+import logging
 from datetime import datetime
+from typing import Any, ClassVar, Dict, Iterator, List, Optional, Tuple
 
-from .base import BaseScannerConnector
-from ..base import ConnectionConfig, AuthConfig, ConnectorStatus
+import httpx
+
 from ...models.base import ParsedVulnerability
 from ...normalizers.severity import normalize_severity
+from .base import BaseScannerConnector
+
+logger = logging.getLogger("secimport.connectors")
 
 
 class CrowdStrikeConnector(BaseScannerConnector):
     """
     CrowdStrike Falcon Spotlight vulnerability connector.
-    
-    Usage:
+
+    Uses OAuth2 client-credentials flow for authentication.
+
+    Usage::
+
         from secimport.connectors.scanners import CrowdStrikeConnector
         from secimport.connectors.base import ConnectionConfig, AuthConfig
-        
+
         config = ConnectionConfig(base_url="https://api.crowdstrike.com")
         auth = AuthConfig(
             auth_type="oauth2",
-            credentials={"client_id": "xxx", "client_secret": "yyy"}
+            credentials={"client_id": "xxx", "client_secret": "yyy"},
         )
-        
+
         with CrowdStrikeConnector(config, auth) as cs:
             for vuln in cs.get_vulnerabilities():
                 print(vuln.cve_id, vuln.severity)
     """
-    
-    name = "crowdstrike"
-    vendor = "CrowdStrike"
-    description = "CrowdStrike Falcon Spotlight vulnerability management"
-    auth_types = ["oauth2"]
-    
-    ENDPOINTS = {
+
+    name: ClassVar[str] = "crowdstrike"
+    vendor: ClassVar[str] = "CrowdStrike"
+    description: ClassVar[str] = "CrowdStrike Falcon Spotlight vulnerability management"
+    auth_types: ClassVar[Tuple[str, ...]] = ("oauth2",)
+
+    _test_endpoint: ClassVar[str] = "/sensors/queries/installers/v1?limit=1"
+
+    ENDPOINTS: ClassVar[Dict[str, str]] = {
         "oauth2_token": "/oauth2/token",
         "vulns": "/spotlight/combined/vulnerabilities/v1",
         "hosts": "/devices/queries/devices/v1",
         "host_details": "/devices/entities/devices/v2",
     }
-    
-    def __init__(self, *args, **kwargs):
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._access_token: Optional[str] = None
-    
+
     def connect(self) -> bool:
-        """Establish connection to CrowdStrike API."""
-        import httpx
-        
+        """Establish connection via OAuth2 client-credentials flow."""
+        # Obtain an access token first
+        token_client = httpx.Client(
+            base_url=self.connection.base_url,
+            timeout=self.connection.timeout,
+            verify=self.connection.verify_ssl,
+        )
         try:
-            # First get OAuth2 token
-            token_client = httpx.Client(
-                base_url=self.connection.base_url,
-                timeout=self.connection.timeout,
-                verify=self.connection.verify_ssl,
-            )
-            
             token_response = token_client.post(
                 self.ENDPOINTS["oauth2_token"],
                 data={
@@ -69,65 +75,40 @@ class CrowdStrikeConnector(BaseScannerConnector):
                     "client_secret": self.auth.credentials["client_secret"],
                 },
             )
-            
             if token_response.status_code != 201:
-                raise ConnectionError("Failed to get OAuth2 token")
-            
+                raise ConnectionError("Failed to obtain OAuth2 token from CrowdStrike")
+
             self._access_token = token_response.json()["access_token"]
+        finally:
             token_client.close()
-            
-            # Create authenticated client
-            self._client = httpx.Client(
-                base_url=self.connection.base_url,
-                headers={
-                    "Authorization": f"Bearer {self._access_token}",
-                    "Content-Type": "application/json",
-                },
-                timeout=self.connection.timeout,
-                verify=self.connection.verify_ssl,
-            )
-            
-            if self.test_connection():
-                self.status = ConnectorStatus.CONNECTED
-                return True
-            
-            return False
-            
-        except Exception as e:
-            self.status = ConnectorStatus.ERROR
-            raise ConnectionError(f"Failed to connect to CrowdStrike: {e}")
-    
+
+        # Build the authenticated client
+        client = self._build_client(
+            headers={
+                "Authorization": f"Bearer {self._access_token}",
+                "Content-Type": "application/json",
+            },
+        )
+        return self._connect_with_test(client)
+
     def disconnect(self) -> None:
-        """Close CrowdStrike connection."""
-        if self._client:
-            self._client.close()
-            self._client = None
+        super().disconnect()
         self._access_token = None
-        self.status = ConnectorStatus.DISCONNECTED
-    
-    def test_connection(self) -> bool:
-        """Test CrowdStrike API connection."""
-        try:
-            response = self._client.get("/sensors/queries/installers/v1?limit=1")
-            return response.status_code == 200
-        except Exception:
-            return False
-    
+
     def get_rate_limit_status(self) -> Dict[str, Any]:
-        """Get CrowdStrike rate limit info."""
         return {
             "note": "CrowdStrike uses per-minute rate limits",
             "see": "X-RateLimit-* response headers",
         }
-    
+
     def get_scans(
         self,
         limit: Optional[int] = None,
         since: Optional[datetime] = None,
     ) -> List[Dict[str, Any]]:
-        """CrowdStrike doesn't have traditional scans - returns empty."""
+        """CrowdStrike doesn't have traditional scans."""
         return []
-    
+
     def get_vulnerabilities(
         self,
         scan_id: Optional[str] = None,
@@ -137,27 +118,24 @@ class CrowdStrikeConnector(BaseScannerConnector):
     ) -> Iterator[ParsedVulnerability]:
         """
         Fetch vulnerabilities from CrowdStrike Spotlight.
-        
-        TODO: Implement using Spotlight API
+
         GET /spotlight/combined/vulnerabilities/v1
         """
         raise NotImplementedError("Community contribution welcome!")
-    
-    def get_assets(
-        self,
-        limit: Optional[int] = None,
-    ) -> Iterator[Dict[str, Any]]:
-        """Get hosts from CrowdStrike."""
-        # TODO: Implement
-        # GET /devices/queries/devices/v1
-        # GET /devices/entities/devices/v2
+
+    def get_assets(self, limit: Optional[int] = None) -> Iterator[Dict[str, Any]]:
+        """
+        Get hosts from CrowdStrike.
+
+        GET /devices/queries/devices/v1
+        GET /devices/entities/devices/v2
+        """
         raise NotImplementedError("Community contribution welcome!")
-    
+
     def _parse_vulnerability(self, raw: Dict[str, Any]) -> ParsedVulnerability:
         """Parse CrowdStrike vuln into normalized format."""
         cve = raw.get("cve", {})
         host = raw.get("host_info", {})
-        
         return ParsedVulnerability(
             scanner_id=str(raw.get("id", "")),
             cve_id=cve.get("id"),
