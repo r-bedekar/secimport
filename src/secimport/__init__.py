@@ -19,10 +19,16 @@ from .connectors.scanners import (
     Rapid7Connector,
     TenableConnector,
 )
+
+# Auto-detection and parsing
+from .detectors import detect_all, detect_data_type, detect_parser, detect_source, parse_file
 from .models.base import ParsedAsset, ParsedOwnerMapping, ParsedVulnerability, ParseResult
 
 # Normalizers
 from .normalizers.severity import normalize_severity
+
+# Parser infrastructure
+from .parsers.base import BaseParser, ParserRegistry
 
 __all__ = [
     # version
@@ -46,4 +52,13 @@ __all__ = [
     "QualysConnector",
     "Rapid7Connector",
     "TenableConnector",
+    # parser infrastructure
+    "BaseParser",
+    "ParserRegistry",
+    # detection & parsing
+    "detect_all",
+    "detect_data_type",
+    "detect_parser",
+    "detect_source",
+    "parse_file",
 ]

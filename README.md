@@ -30,6 +30,20 @@ pip install "secimport[dev]"
 
 ## Quick Start
 
+### Parse a File (Auto-Detection)
+
+```python
+from secimport import parse_file
+
+# Auto-detects source (Qualys, Nessus, etc.) from column headers
+data, result = parse_file("scan_export.csv")
+
+for vuln in data:
+    print(vuln.cve_id, vuln.severity, vuln.hostname)
+
+print(f"Parsed {result.parsed_count} from {result.source_type}")
+```
+
 ### Scanner Connector
 
 ```python
@@ -59,43 +73,77 @@ normalize_severity("Info", "nessus")     # "Low"
 normalize_severity("Log", "openvas")     # "Low"
 ```
 
-### Connector Registry
+### Registry Discovery
 
-All connectors auto-register on import. Discover what's available:
+All connectors and parsers auto-register on import:
 
 ```python
-from secimport import ConnectorRegistry
+from secimport import ConnectorRegistry, ParserRegistry
 
 for name, cls in ConnectorRegistry.list_connectors().items():
     print(f"{name}: {cls.vendor} - {cls.description}")
+
+for name, cls in ParserRegistry.list_parsers().items():
+    print(f"{name}: {cls.source} ({cls.data_type})")
 ```
 
 ## Supported Sources
 
 ### Vulnerability Scanners
 
-| Scanner | Connector | Auth Types | Status |
-|---------|-----------|------------|--------|
-| Qualys VMDR | `QualysConnector` | basic, api_key | Stub |
-| Nessus | `NessusConnector` | api_key, basic | Stub |
-| Tenable.io | `TenableConnector` | api_key | Stub |
-| Rapid7 InsightVM | `Rapid7Connector` | basic, api_key | Stub |
-| OpenVAS / Greenbone | `OpenVASConnector` | basic | Stub |
-| CrowdStrike Spotlight | `CrowdStrikeConnector` | oauth2 | Stub |
+| Scanner | Connector | Parser | Auth Types |
+|---------|-----------|--------|------------|
+| Qualys VMDR | `QualysConnector` | `QualysVulnParser` | basic, api_key |
+| Nessus | `NessusConnector` | `NessusVulnParser` | api_key, basic |
+| Tenable.io | `TenableConnector` | `TenableVulnParser` | api_key |
+| Rapid7 InsightVM | `Rapid7Connector` | `Rapid7VulnParser` | basic, api_key |
+| OpenVAS / Greenbone | `OpenVASConnector` | `OpenVASVulnParser` | basic |
+| CrowdStrike Spotlight | `CrowdStrikeConnector` | `CrowdStrikeVulnParser` | oauth2 |
+| Generic | -- | `GenericVulnParser` | -- |
 
-### Planned Integrations (Contributions Welcome)
+### CMDB
 
-| Category | Systems |
-|----------|---------|
-| **CMDB** | ServiceNow, BMC Helix |
-| **IPAM** | Infoblox, NetBox, SolarWinds |
-| **Directory** | Active Directory, Azure AD, LDAP |
-| **Cloud** | AWS (tags), Azure (tags), GCP (labels) |
-| **File Parsers** | Qualys CSV, Nessus CSV, asset spreadsheets, owner mappings |
+| System | Connector | Parser | Auth Types |
+|--------|-----------|--------|------------|
+| ServiceNow | `ServiceNowConnector` | `ServiceNowAssetParser` | basic, oauth2 |
+| BMC Helix | `BMCHelixConnector` | -- | basic, token |
+
+### IPAM
+
+| System | Connector | Parser | Auth Types |
+|--------|-----------|--------|------------|
+| Infoblox | `InfobloxConnector` | `IPAMOwnerParser` | basic |
+| NetBox | `NetBoxConnector` | -- | token |
+| SolarWinds | `SolarWindsConnector` | -- | basic |
+| Generic | -- | `GenericOwnerParser` | -- |
+
+### Directory Services
+
+| System | Connector | Auth Types |
+|--------|-----------|------------|
+| Active Directory | `ActiveDirectoryConnector` | ldap |
+| Azure AD | `AzureADConnector` | oauth2 |
+
+### Cloud Providers
+
+| Provider | Connector | Auth Types |
+|----------|-----------|------------|
+| AWS | `AWSConnector` | aws_credentials |
+| Azure | `AzureConnector` | azure_credentials |
+| GCP | `GCPConnector` | gcp_credentials |
+
+### File Parsers
+
+| Parser | Data Type | Auto-Detected |
+|--------|-----------|---------------|
+| `GenericAssetParser` | asset | Yes |
+| `ServiceNowAssetParser` | asset | Yes |
+| `GenericOwnerParser` | owner | Yes |
+| `IPAMOwnerParser` | owner | Yes |
 
 ## Data Models
 
-All connectors output normalized [Pydantic](https://docs.pydantic.dev/) models:
+All connectors and parsers output normalized [Pydantic](https://docs.pydantic.dev/) models:
 
 ### ParsedVulnerability
 
@@ -145,134 +193,54 @@ secimport/
 ├── models/              # Pydantic data models
 │   └── base.py          # ParsedVulnerability, ParsedAsset, ParsedOwnerMapping
 ├── normalizers/         # Cross-scanner normalization
-│   └── severity.py      # Severity mapping (Qualys 1-5 → Critical/High/Medium/Low)
+│   └── severity.py      # Severity mapping (Qualys 1-5 -> Critical/High/Medium/Low)
 ├── connectors/          # API connectors
-│   ├── base.py          # BaseConnector, ConnectionConfig, AuthConfig, ConnectorRegistry
-│   ├── scanners/        # Vulnerability scanners
-│   │   ├── base.py      # BaseScannerConnector (shared connect/test/disconnect)
-│   │   ├── qualys.py
-│   │   ├── nessus.py
-│   │   ├── tenable.py
-│   │   ├── rapid7.py
-│   │   ├── openvas.py
-│   │   └── crowdstrike.py
-│   ├── cmdb/            # CMDB connectors (planned)
-│   ├── ipam/            # IPAM connectors (planned)
-│   ├── directory/       # Directory service connectors (planned)
-│   └── cloud/           # Cloud provider connectors (planned)
-├── parsers/             # File parsers (planned)
-│   ├── vulnerabilities/ # Scanner CSV/Excel parsers
+│   ├── base.py          # BaseConnector, ConnectorRegistry, auth + connection infra
+│   ├── scanners/        # Vulnerability scanners (Qualys, Nessus, Tenable, etc.)
+│   ├── cmdb/            # CMDB (ServiceNow, BMC Helix)
+│   ├── ipam/            # IPAM (Infoblox, NetBox, SolarWinds)
+│   ├── directory/       # Directory services (AD, Azure AD)
+│   └── cloud/           # Cloud providers (AWS, Azure, GCP)
+├── parsers/             # File parsers (CSV/Excel)
+│   ├── base.py          # BaseParser, ParserRegistry, column mapping + detection
+│   ├── vulnerabilities/ # Scanner CSV parsers (Qualys, Nessus, Tenable, etc.)
 │   ├── assets/          # Asset spreadsheet parsers
 │   └── owners/          # Owner mapping parsers
-└── detectors/           # Auto-detection (planned)
+└── detectors/           # Auto-detection engine
+    └── auto_detect.py   # detect_parser(), detect_source(), parse_file()
 ```
 
 ## Contributing
 
-We welcome contributions! This project is designed to make it easy to add new connectors.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
 ### Development Setup
 
 ```bash
 git clone https://github.com/zeroinsec/secimport.git
 cd secimport
+python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest                  # Run tests
 ruff check src tests    # Lint
 black src tests         # Format
 ```
 
-### Adding a New Connector
-
-1. **Pick a category** -- `scanners/`, `cmdb/`, `ipam/`, `directory/`, or `cloud/`
-
-2. **Create your connector file** inheriting from the appropriate base class:
-
-```python
-"""
-MyScanner API Connector.
-
-API Docs: https://docs.myscanner.com/api
-
-Status: STUB - Community contribution welcome!
-"""
-
-from datetime import datetime
-from typing import Any, ClassVar, Dict, Iterator, List, Optional, Tuple
-
-from ...models.base import ParsedVulnerability
-from ...normalizers.severity import normalize_severity
-from .base import BaseScannerConnector
-
-
-class MyScannerConnector(BaseScannerConnector):
-    """
-    MyScanner API connector.
-
-    Usage::
-
-        from secimport.connectors.scanners import MyScannerConnector
-        from secimport.connectors.base import ConnectionConfig, AuthConfig
-
-        config = ConnectionConfig(base_url="https://api.myscanner.com")
-        auth = AuthConfig(auth_type="api_key", credentials={"api_key": "xxx"})
-
-        with MyScannerConnector(config, auth) as scanner:
-            for vuln in scanner.get_vulnerabilities():
-                print(vuln.cve_id, vuln.severity)
-    """
-
-    name: ClassVar[str] = "myscanner"
-    vendor: ClassVar[str] = "MyVendor"
-    description: ClassVar[str] = "MyScanner vulnerability scanner"
-    auth_types: ClassVar[Tuple[str, ...]] = ("api_key",)
-
-    _test_endpoint: ClassVar[str] = "/api/v1/status"
-
-    ENDPOINTS: ClassVar[Dict[str, str]] = {
-        "scans": "/api/v1/scans",
-        "vulnerabilities": "/api/v1/vulns",
-    }
-
-    def _auth_headers(self) -> Dict[str, str]:
-        """Return auth headers for the API."""
-        return {"X-Api-Key": self.auth.credentials["api_key"]}
-
-    def get_scans(self, limit=None, since=None) -> List[Dict[str, Any]]:
-        raise NotImplementedError("Community contribution welcome!")
-
-    def get_vulnerabilities(self, scan_id=None, severity=None, since=None, limit=None):
-        raise NotImplementedError("Community contribution welcome!")
-
-    def get_assets(self, limit=None):
-        raise NotImplementedError("Community contribution welcome!")
-
-    def _parse_vulnerability(self, raw: Dict[str, Any]) -> ParsedVulnerability:
-        return ParsedVulnerability(
-            scanner_id=str(raw.get("id", "")),
-            cve_id=raw.get("cve"),
-            title=raw.get("name", "Unknown"),
-            severity=normalize_severity(raw.get("severity"), "generic"),
-            extra=raw,
-        )
-```
-
-3. **Export it** in the category's `__init__.py`
-
-4. **Add tests** in `tests/`
-
-5. **Submit a PR**
-
 ### What the Base Classes Give You for Free
 
-- **`connect()`** -- builds an `httpx.Client` with your auth headers and runs `test_connection()`
-- **`disconnect()`** -- closes the HTTP client and resets status
-- **`test_connection()`** -- pings your `_test_endpoint`
-- **Context manager** -- `with MyConnector(...) as c:` auto-connects/disconnects
-- **Auth validation** -- rejects unsupported auth types at init
-- **Auto-registration** -- your connector appears in `ConnectorRegistry` on import
+**Connectors** (`BaseConnector`):
+- `connect()` / `disconnect()` / `test_connection()` with auth hooks
+- Context manager (`with MyConnector(...) as c:`)
+- Auth validation at init
+- Auto-registration in `ConnectorRegistry`
 
-You only need to implement: `_auth_headers()`, `_parse_vulnerability()`, and your data methods.
+**Parsers** (`BaseParser`):
+- CSV/Excel file reading
+- Column mapping (`COLUMN_MAPPING` dict)
+- Auto-detection from column fingerprints (`DETECTION_COLUMNS`)
+- Auto-registration in `ParserRegistry`
+
+You only implement: `_auth_headers()` + data methods (connectors), or `COLUMN_MAPPING` + `_parse_row()` (parsers).
 
 ### Code Style
 
@@ -281,16 +249,6 @@ You only need to implement: `_auth_headers()`, `_parse_vulnerability()`, and you
 - Linter: `ruff`
 - Type hints: Required
 - Docstrings: Google style
-
-### Optional Dependencies
-
-If your connector needs a third-party library, add it to `pyproject.toml` under `[project.optional-dependencies]`:
-
-```toml
-myscanner = ["myscanner-sdk>=1.0.0"]
-```
-
-And add it to the `all` group.
 
 ## License
 
