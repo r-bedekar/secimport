@@ -1,0 +1,120 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "secimport"
+version = "0.1.0"
+description = "Parse and normalize security data imports — vulnerability scans, assets, CMDB, IPAM, and more"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "ZeroinSEC", email = "opensource@zeroinsec.com"}
+]
+keywords = [
+    "security",
+    "vulnerability",
+    "asset",
+    "cmdb",
+    "ipam",
+    "qualys",
+    "nessus",
+    "tenable",
+    "servicenow",
+    "infoblox",
+    "parser",
+    "connector",
+    "api",
+    "import",
+    "csv"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "pandas>=2.0.0",
+    "pydantic>=2.0.0",
+    "httpx>=0.25.0",
+]
+requires-python = ">=3.10"
+
+[project.urls]
+Homepage = "https://github.com/zeroinsec/secimport"
+Documentation = "https://github.com/zeroinsec/secimport#readme"
+Repository = "https://github.com/zeroinsec/secimport"
+Issues = "https://github.com/zeroinsec/secimport/issues"
+Changelog = "https://github.com/zeroinsec/secimport/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# Development tools
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "respx>=0.20.0",
+]
+
+# File format support
+excel = ["openpyxl>=3.0.0"]
+
+# Scanner connectors
+qualys = ["qualysapi>=1.0.0"]
+tenable = ["pytenable>=1.4.0"]
+
+# CMDB connectors
+servicenow = ["pysnc>=1.0.0"]
+
+# IPAM connectors
+netbox = ["pynetbox>=7.0.0"]
+infoblox = ["infoblox-client>=0.6.0"]
+
+# Directory connectors
+ldap = ["ldap3>=2.9.0"]
+
+# Cloud connectors
+aws = ["boto3>=1.28.0"]
+azure = ["azure-identity>=1.14.0", "azure-mgmt-resource>=23.0.0"]
+gcp = ["google-cloud-asset>=3.0.0"]
+
+# Install all connectors
+all = [
+    "secimport[excel]",
+    "secimport[qualys]",
+    "secimport[tenable]",
+    "secimport[servicenow]",
+    "secimport[netbox]",
+    "secimport[infoblox]",
+    "secimport[ldap]",
+    "secimport[aws]",
+    "secimport[azure]",
+    "secimport[gcp]",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/secimport"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "N", "W"]
