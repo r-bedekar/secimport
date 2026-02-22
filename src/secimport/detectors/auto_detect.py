@@ -7,6 +7,7 @@ is automatically included when its module is imported.
 """
 
 import logging
+import time
 from pathlib import Path
 from typing import Iterator, List, Optional, Tuple, Type, Union
 
@@ -165,13 +166,13 @@ def parse_file(
         source_type=parser.source,
         data_type=parser.data_type,
         file_path=str(path),
+        parser_name=parser.name,
     )
 
     def _counting_iterator() -> Iterator[BaseModel]:
-        """Wrap parser output to count successes and errors."""
-        for item in parser.parse(path, sheet_name=sheet_name):
-            result.parsed_count += 1
-            result.total_rows += 1
-            yield item
+        """Wrap parser output, delegating counting to parser.parse()."""
+        start = time.monotonic()
+        yield from parser.parse(path, sheet_name=sheet_name, result=result)
+        result.duration_seconds = round(time.monotonic() - start, 3)
 
     return _counting_iterator(), result

@@ -7,7 +7,7 @@ Extend this for: Active Directory, Azure AD / Entra ID, LDAP, Okta, etc.
 from abc import abstractmethod
 from typing import Any, Dict, Iterator, Optional
 
-from ...models.base import ParsedAsset
+from ...models.base import ParsedAsset, ParsedGroup, ParsedUser
 from ..base import BaseConnector
 
 
@@ -21,7 +21,7 @@ class BaseDirectoryConnector(BaseConnector):
     Subclass contract:
         * Override ``_auth_headers`` / ``_test_endpoint`` as needed.
         * Implement ``get_users``, ``get_groups``, ``get_computers``, ``search``.
-        * Implement ``_parse_computer`` to map raw directory data to the model.
+        * Implement ``_parse_user``, ``_parse_group``, ``_parse_computer``.
     """
 
     # -- abstract data methods -------------------------------------------------
@@ -31,7 +31,7 @@ class BaseDirectoryConnector(BaseConnector):
         self,
         limit: Optional[int] = None,
         search_filter: Optional[str] = None,
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[ParsedUser]:
         """
         Get users from the directory service.
 
@@ -40,7 +40,7 @@ class BaseDirectoryConnector(BaseConnector):
             search_filter: Optional filter string (LDAP filter, OData, etc.).
 
         Yields:
-            User attribute dicts from the directory.
+            ``ParsedUser`` objects.
         """
         ...
 
@@ -48,7 +48,7 @@ class BaseDirectoryConnector(BaseConnector):
     def get_groups(
         self,
         limit: Optional[int] = None,
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[ParsedGroup]:
         """
         Get groups from the directory service.
 
@@ -56,7 +56,7 @@ class BaseDirectoryConnector(BaseConnector):
             limit: Maximum number of groups to return.
 
         Yields:
-            Group attribute dicts from the directory.
+            ``ParsedGroup`` objects.
         """
         ...
 
@@ -94,7 +94,17 @@ class BaseDirectoryConnector(BaseConnector):
         """
         ...
 
-    # -- parse helper ----------------------------------------------------------
+    # -- parse helpers ---------------------------------------------------------
+
+    @abstractmethod
+    def _parse_user(self, raw: Dict[str, Any]) -> ParsedUser:
+        """Map a single raw directory record to ``ParsedUser``."""
+        ...
+
+    @abstractmethod
+    def _parse_group(self, raw: Dict[str, Any]) -> ParsedGroup:
+        """Map a single raw directory record to ``ParsedGroup``."""
+        ...
 
     @abstractmethod
     def _parse_computer(self, raw: Dict[str, Any]) -> ParsedAsset:

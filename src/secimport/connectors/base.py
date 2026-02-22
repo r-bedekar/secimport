@@ -13,6 +13,8 @@ from typing import Any, ClassVar, Dict, Optional, Tuple, Type
 import httpx
 from pydantic import BaseModel, Field
 
+from .pagination import PaginationMixin
+
 logger = logging.getLogger("secimport.connectors")
 
 
@@ -75,7 +77,7 @@ class ConnectorRegistry:
         return dict(cls._connectors)
 
 
-class BaseConnector(ABC):
+class BaseConnector(PaginationMixin, ABC):
     """
     Abstract base class for all connectors.
 

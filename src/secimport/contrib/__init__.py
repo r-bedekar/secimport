@@ -1,0 +1,1 @@
+"""Contributor templates and examples."""

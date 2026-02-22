@@ -33,6 +33,15 @@ def oauth2_auth() -> AuthConfig:
 
 
 @pytest.fixture()
+def token_auth() -> AuthConfig:
+    """Token auth credentials for testing."""
+    return AuthConfig(
+        auth_type="token",
+        credentials={"token": "tok_test123"},
+    )
+
+
+@pytest.fixture()
 def connection_config() -> ConnectionConfig:
     """Standard connection config for testing."""
     return ConnectionConfig(

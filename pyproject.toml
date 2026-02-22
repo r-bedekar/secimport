@@ -17,16 +17,25 @@ keywords = [
     "asset",
     "cmdb",
     "ipam",
+    "edr",
+    "xdr",
+    "ndr",
+    "siem",
     "qualys",
     "nessus",
     "tenable",
+    "crowdstrike",
+    "sentinelone",
+    "defender",
+    "splunk",
     "servicenow",
     "infoblox",
     "parser",
     "connector",
     "api",
     "import",
-    "csv"
+    "csv",
+    "enrichment",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -45,6 +54,7 @@ dependencies = [
     "pandas>=2.0.0",
     "pydantic>=2.0.0",
     "httpx>=0.25.0",
+    "pyyaml>=6.0.0",
 ]
 requires-python = ">=3.10"
 
@@ -89,6 +99,23 @@ aws = ["boto3>=1.28.0"]
 azure = ["azure-identity>=1.14.0", "azure-mgmt-resource>=23.0.0"]
 gcp = ["google-cloud-asset>=3.0.0"]
 
+# EDR/AV connectors
+crowdstrike = ["crowdstrike-falconpy>=1.3.0"]
+sentinelone = ["sentinelone>=0.3.0"]
+carbonblack = ["carbon-black-cloud-sdk>=1.5.0"]
+
+# XDR connectors (use vendor-specific deps where available)
+cortex-xdr = []  # Uses httpx (core dep)
+vision-one = []  # Uses httpx (core dep)
+
+# NDR connectors
+darktrace = []  # Uses httpx (core dep)
+extrahop = []  # Uses httpx (core dep)
+vectra = []  # Uses httpx (core dep)
+
+# SIEM connectors
+splunk = ["splunk-sdk>=2.0.0"]
+
 # Install all connectors
 all = [
     "secimport[excel]",
@@ -101,7 +128,14 @@ all = [
     "secimport[aws]",
     "secimport[azure]",
     "secimport[gcp]",
+    "secimport[crowdstrike]",
+    "secimport[sentinelone]",
+    "secimport[carbonblack]",
+    "secimport[splunk]",
 ]
+
+[project.scripts]
+secimport = "secimport.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/secimport"]

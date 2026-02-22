@@ -11,7 +11,7 @@ from typing import Any, ClassVar, Dict, Iterator, Optional, Tuple
 
 import httpx
 
-from ...models.base import ParsedAsset
+from ...models.base import ParsedAsset, ParsedGroup, ParsedUser
 from .base import BaseDirectoryConnector
 
 logger = logging.getLogger("secimport.connectors")
@@ -127,7 +127,7 @@ class AzureADConnector(BaseDirectoryConnector):
         self,
         limit: Optional[int] = None,
         search_filter: Optional[str] = None,
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[ParsedUser]:
         """
         List users from Microsoft Entra ID.
 
@@ -138,7 +138,7 @@ class AzureADConnector(BaseDirectoryConnector):
     def get_groups(
         self,
         limit: Optional[int] = None,
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[ParsedGroup]:
         """
         List groups from Microsoft Entra ID.
 
@@ -172,7 +172,70 @@ class AzureADConnector(BaseDirectoryConnector):
         """
         raise NotImplementedError("Community contribution welcome!")
 
-    # -- parse helper ----------------------------------------------------------
+    # -- parse helpers ---------------------------------------------------------
+
+    def _parse_user(self, raw: Dict[str, Any]) -> ParsedUser:
+        """
+        Map a Microsoft Graph user object to ``ParsedUser``.
+
+        Expected Graph fields::
+
+            id, userPrincipalName, mail, displayName, givenName, surname,
+            jobTitle, department, accountEnabled, lastSignInDateTime,
+            employeeId, manager
+        """
+        return ParsedUser(
+            username=raw.get("userPrincipalName"),
+            email=raw.get("mail"),
+            display_name=raw.get("displayName"),
+            employee_id=raw.get("employeeId"),
+            enabled=raw.get("accountEnabled"),
+            last_login=raw.get("lastSignInDateTime"),
+            department=raw.get("department"),
+            title=raw.get("jobTitle"),
+            location=raw.get("officeLocation"),
+            source_system="azure_ad",
+            extra={
+                "entra_object_id": raw.get("id"),
+                "given_name": raw.get("givenName"),
+                "surname": raw.get("surname"),
+                "company_name": raw.get("companyName"),
+                "usage_location": raw.get("usageLocation"),
+            },
+        )
+
+    def _parse_group(self, raw: Dict[str, Any]) -> ParsedGroup:
+        """
+        Map a Microsoft Graph group object to ``ParsedGroup``.
+
+        Expected Graph fields::
+
+            id, displayName, description, groupTypes, mailEnabled,
+            securityEnabled, membershipRule
+        """
+        group_types = raw.get("groupTypes", [])
+        security_enabled = raw.get("securityEnabled", False)
+
+        if "DynamicMembership" in group_types:
+            group_type = "DynamicDistribution"
+        elif security_enabled:
+            group_type = "Security"
+        else:
+            group_type = "Distribution"
+
+        return ParsedGroup(
+            name=raw.get("displayName"),
+            display_name=raw.get("displayName"),
+            description=raw.get("description"),
+            group_type=group_type,
+            source_system="azure_ad",
+            extra={
+                "entra_object_id": raw.get("id"),
+                "mail_enabled": raw.get("mailEnabled"),
+                "membership_rule": raw.get("membershipRule"),
+                "group_types": group_types,
+            },
+        )
 
     def _parse_computer(self, raw: Dict[str, Any]) -> ParsedAsset:
         """

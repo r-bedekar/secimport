@@ -9,7 +9,7 @@ Status: STUB - Community contribution welcome!
 import logging
 from typing import Any, ClassVar, Dict, Iterator, Optional, Tuple
 
-from ...models.base import ParsedAsset
+from ...models.base import ParsedAsset, ParsedGroup, ParsedUser
 from ..base import AuthConfig, ConnectionConfig, ConnectorStatus
 from .base import BaseDirectoryConnector
 
@@ -134,7 +134,7 @@ class ActiveDirectoryConnector(BaseDirectoryConnector):
         self,
         limit: Optional[int] = None,
         search_filter: Optional[str] = None,
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[ParsedUser]:
         """
         Query Active Directory for user objects.
 
@@ -146,7 +146,7 @@ class ActiveDirectoryConnector(BaseDirectoryConnector):
     def get_groups(
         self,
         limit: Optional[int] = None,
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[ParsedGroup]:
         """
         Query Active Directory for group objects.
 
@@ -181,7 +181,88 @@ class ActiveDirectoryConnector(BaseDirectoryConnector):
         """
         raise NotImplementedError("Community contribution welcome!")
 
-    # -- parse helper ----------------------------------------------------------
+    # -- parse helpers ---------------------------------------------------------
+
+    def _parse_user(self, raw: Dict[str, Any]) -> ParsedUser:
+        """
+        Map an Active Directory user entry to ``ParsedUser``.
+
+        Expected AD attributes::
+
+            sAMAccountName, mail, displayName, distinguishedName,
+            department, title, manager, memberOf, userAccountControl,
+            employeeID, whenCreated, lastLogonTimestamp
+        """
+        # userAccountControl bit 2 = ACCOUNTDISABLE
+        uac = raw.get("userAccountControl")
+        enabled = None
+        if uac is not None:
+            try:
+                enabled = not bool(int(uac) & 0x2)
+            except (ValueError, TypeError):
+                pass
+
+        groups = raw.get("memberOf", [])
+        if isinstance(groups, str):
+            groups = [groups]
+
+        return ParsedUser(
+            username=raw.get("sAMAccountName"),
+            email=raw.get("mail"),
+            display_name=raw.get("displayName"),
+            distinguished_name=raw.get("distinguishedName"),
+            employee_id=raw.get("employeeID"),
+            enabled=enabled,
+            department=raw.get("department"),
+            title=raw.get("title"),
+            manager_name=raw.get("manager"),
+            groups=groups,
+            source_system="active_directory",
+            extra={
+                "cn": raw.get("cn"),
+                "when_created": raw.get("whenCreated"),
+                "when_changed": raw.get("whenChanged"),
+            },
+        )
+
+    def _parse_group(self, raw: Dict[str, Any]) -> ParsedGroup:
+        """
+        Map an Active Directory group entry to ``ParsedGroup``.
+
+        Expected AD attributes::
+
+            cn, description, distinguishedName, groupType, member
+        """
+        members = raw.get("member", [])
+        if isinstance(members, str):
+            members = [members]
+
+        # groupType is a bitmask; negative values are security groups
+        group_type_val = raw.get("groupType")
+        group_type = None
+        if group_type_val is not None:
+            try:
+                group_type = "Security" if int(group_type_val) < 0 else "Distribution"
+            except (ValueError, TypeError):
+                pass
+
+        return ParsedGroup(
+            name=raw.get("cn"),
+            display_name=raw.get("cn"),
+            description=(
+                raw.get("description", [None])[0]
+                if isinstance(raw.get("description"), list)
+                else raw.get("description")
+            ),
+            group_type=group_type,
+            member_count=len(members),
+            members=members,
+            source_system="active_directory",
+            extra={
+                "distinguished_name": raw.get("distinguishedName"),
+                "when_created": raw.get("whenCreated"),
+            },
+        )
 
     def _parse_computer(self, raw: Dict[str, Any]) -> ParsedAsset:
         """

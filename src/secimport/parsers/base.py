@@ -213,6 +213,7 @@ class BaseParser(ABC):
         file_path: Union[str, Path],
         *,
         sheet_name: Optional[str] = None,
+        result: Optional[Any] = None,
     ) -> Iterator[BaseModel]:
         """
         Parse a file and yield normalized model instances.
@@ -223,6 +224,7 @@ class BaseParser(ABC):
         Args:
             file_path: Path to the CSV/Excel file.
             sheet_name: For Excel files, which sheet to read.
+            result: Optional ``ParseResult`` to track row counts and errors.
 
         Yields:
             Pydantic model instances (ParsedVulnerability, ParsedAsset, etc.)
@@ -233,10 +235,18 @@ class BaseParser(ABC):
         )
 
         for idx, row in df.iterrows():
+            if result is not None:
+                result.total_rows += 1
             try:
                 mapped = self._map_columns(row.to_dict())
-                yield self._parse_row(mapped)
+                item = self._parse_row(mapped)
+                if result is not None:
+                    result.parsed_count += 1
+                yield item
             except Exception as exc:
                 logger.warning(
                     "%s: failed to parse row %d: %s", self.name, idx, exc
                 )
+                if result is not None:
+                    result.error_count += 1
+                    result.errors.append(f"Row {idx}: {exc}")
